@@ -1,36 +1,33 @@
 # Blockchain Coinbase
 
-Implementation of a simplified distributed cryptocurrency/transaction system (Bitcoin-like) for the LSD 2025 course.
+Implementation of a simplified distributed cryptocurrency/transaction system (Bitcoin-like).
 
 ## Requirements
 - Python 3.8+
 
 ## Usage
 
-### Start a Node
-To start a node, use the `src/main.py` script.
+### Start GUI
+To start the graphical interface:
 
 ```bash
-python3 src/main.py --port <PORT> [--bootstrap <HOST:PORT>]
+python3 src/gui.py
 ```
-
-Example:
-```bash
-# Start the first node (bootstrap node)
-python3 src/main.py --port 5000
-
-# Start a second node connecting to the first one
-python3 src/main.py --port 5001 --bootstrap localhost:5000
-```
+This allows configuring the node, viewing the blockchain, sending transactions, and mining interactively.
+**Note:** You must start mining to earn coins (via Coinbase transactions) before you can send transactions.
 
 ## Running Tests
-To run the communication tests:
+To run all tests:
 
 ```bash
-python3 tests/test_communication.py
+python3 -m unittest discover tests
 ```
 
 ## Structure
-- `src/node.py`: Core `Node` class handling networking.
+- `src/node.py`: Core `Node` class handling networking and P2P logic.
+- `src/blockchain.py`: Blockchain logic (chain, pending pool, validation).
+- `src/block.py`: Block structure and hashing.
+- `src/transaction.py`: Transaction structure and validation.
+- `src/gui.py`: Tkinter GUI for interactive use.
 - `src/main.py`: Entry point for the CLI.
 - `tests/`: Unit and integration tests.
