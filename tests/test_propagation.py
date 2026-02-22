@@ -37,15 +37,15 @@ class TestTransactionPropagation(unittest.TestCase):
         self.node_a.start()
         time.sleep(1)
         
-        # Create transaction from 'admin' (who has funds from genesis)
-        tx = Transaction("admin", "user1", 10)
+        # Create transaction from 'coinbase' (bypass balance check for test)
+        tx = Transaction("coinbase", "user1", 10)
         
         # Add to A locally
         added = self.node_a.blockchain.add_transaction(tx)
         self.assertTrue(added)
         
         # Broadcast from A (simulating A receiving it from client)
-        self.node_a.broadcast_message('NEW_TRANSACTION', tx.to_dict())
+        self.node_a.broadcast_message('NEW_TRANSACTION', {'transaction': tx.to_dict()})
         
         # Wait for propagation
         time.sleep(2)

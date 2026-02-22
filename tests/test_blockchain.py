@@ -17,8 +17,8 @@ class TestBlockchain(unittest.TestCase):
         """Test if the genesis block is created correctly."""
         genesis_block = self.blockchain.chain[0]
         self.assertEqual(genesis_block.index, 0)
-        self.assertEqual(genesis_block.previous_hash, "0")
-        self.assertEqual(len(genesis_block.transactions), 1)
+        self.assertEqual(genesis_block.previous_hash, "0"*64)
+        self.assertEqual(len(genesis_block.transactions), 0)
 
     def test_add_block(self):
         """Test adding a new block to the chain."""

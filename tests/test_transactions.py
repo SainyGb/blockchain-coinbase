@@ -13,7 +13,14 @@ from block import Block
 class TestTransaction(unittest.TestCase):
     def setUp(self):
         self.blockchain = Blockchain()
-        # Genesis block gives 100 to 'admin'
+        # Genesis block has no funds. Fund 'admin' manually for tests.
+        # Create a mock block with a coinbase-like transaction
+        fund_tx = Transaction("coinbase", "admin", 100)
+        # We need a valid block structure but for get_balance iteration it just needs to be in chain
+        # and contain the transaction.
+        funding_block = Block(1, self.blockchain.get_latest_block().hash, [fund_tx], timestamp=time.time())
+        funding_block.mine_block(self.blockchain.difficulty)
+        self.blockchain.add_block(funding_block)
 
     def test_transaction_creation(self):
         """Test creating a valid transaction."""

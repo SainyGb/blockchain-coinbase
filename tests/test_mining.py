@@ -30,8 +30,8 @@ class TestMining(unittest.TestCase):
         self.node_b.start()
         time.sleep(1)
 
-        # Create a transaction on A so it has something to mine
-        tx = Transaction("admin", "user1", 10)
+        # Create a transaction on A (use coinbase sender to bypass balance check)
+        tx = Transaction("coinbase", "user1", 10)
         self.node_a.blockchain.add_transaction(tx)
         
         # Start mining on A
