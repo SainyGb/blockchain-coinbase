@@ -27,6 +27,8 @@ class TestNodeBlockchain(unittest.TestCase):
         # Create a valid block manually (mocking mining)
         prev_block = self.node.blockchain.get_latest_block()
         new_block = Block(1, prev_block.hash, ["tx1"])
+        new_block.mine_block(self.node.blockchain.difficulty)
+        
         self.node.blockchain.add_block(new_block)
         
         self.assertEqual(len(self.node.blockchain.chain), 2)

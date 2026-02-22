@@ -18,13 +18,20 @@ class TestBlockchain(unittest.TestCase):
         genesis_block = self.blockchain.chain[0]
         self.assertEqual(genesis_block.index, 0)
         self.assertEqual(genesis_block.previous_hash, "0")
-        self.assertEqual(genesis_block.transactions, [])
+        self.assertEqual(len(genesis_block.transactions), 1)
 
     def test_add_block(self):
         """Test adding a new block to the chain."""
         initial_length = len(self.blockchain.chain)
-        new_block = Block(1, "", ["tx1"], timestamp=time.time())
-        self.blockchain.add_block(new_block)
+        prev_block = self.blockchain.get_latest_block()
+        new_block = Block(1, prev_block.hash, ["tx1"], timestamp=time.time())
+        
+        # Mine block to satisfy difficulty
+        # Assuming difficulty is 3 (default)
+        new_block.mine_block(self.blockchain.difficulty)
+        
+        success = self.blockchain.add_block(new_block)
+        self.assertTrue(success)
         
         self.assertEqual(len(self.blockchain.chain), initial_length + 1)
         self.assertEqual(self.blockchain.chain[-1].previous_hash, self.blockchain.chain[-2].hash)
@@ -32,7 +39,10 @@ class TestBlockchain(unittest.TestCase):
     def test_chain_validity(self):
         """Test the chain validity check."""
         new_block = Block(1, self.blockchain.get_latest_block().hash, ["tx1"], timestamp=time.time())
-        self.blockchain.add_block(new_block)
+        new_block.mine_block(self.blockchain.difficulty)
+        
+        success = self.blockchain.add_block(new_block)
+        self.assertTrue(success)
         
         self.assertTrue(self.blockchain.is_chain_valid())
 
