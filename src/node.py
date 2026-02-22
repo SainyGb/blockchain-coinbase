@@ -19,7 +19,9 @@ class Node:
             self.peers.update(bootstrap_nodes)
         self.running = False
         self.mining = False
+        self.mining_thread = None
         self.server_socket = None
+        self.lock = threading.RLock() # Thread safety for chain/peers
         self.blockchain = Blockchain()
 
     def start(self):
@@ -49,11 +51,13 @@ class Node:
 
     def start_mining(self):
         """Starts the mining process in a separate thread."""
-        if not self.mining:
-            self.mining = True
-            mining_thread = threading.Thread(target=self._mine_loop)
-            mining_thread.daemon = True
-            mining_thread.start()
+        self.mining = True
+        if self.mining_thread and self.mining_thread.is_alive():
+            logging.info("Mining process resumed.")
+        else:
+            self.mining_thread = threading.Thread(target=self._mine_loop)
+            self.mining_thread.daemon = True
+            self.mining_thread.start()
             logging.info("Mining started.")
 
     def stop_mining(self):
@@ -64,15 +68,22 @@ class Node:
     def _mine_loop(self):
         """Continuous mining loop."""
         while self.mining and self.running:
-            # Check for pending transactions
-            if not self.blockchain.pending_transactions:
-                time.sleep(1) # Wait for transactions
-                logging.info("No pending transactions. Waiting...")
-                continue
+            # Simulate mining effort/time to prevent UI freezing and log flooding
+            time.sleep(1)
 
+            # Allow mining empty blocks (Coinbase)
+            # if not self.blockchain.pending_transactions:
+            #    time.sleep(1) 
+            
             # Create a candidate block
             # For simplicity, include all pending transactions (up to a limit in real life)
             pending_txs = list(self.blockchain.pending_transactions)
+            
+            # Add Coinbase transaction (Mining Reward)
+            miner_address = f"{self.host}:{self.port}"
+            coinbase_tx = Transaction("0", miner_address, self.blockchain.mining_reward)
+            # Coinbase is usually the first transaction
+            pending_txs.insert(0, coinbase_tx)
             
             # Create block
             prev_block = self.blockchain.get_latest_block()
@@ -166,6 +177,11 @@ class Node:
             peer_port = payload.get('port')
             
             if peer_port:
+                # Add requesting peer to known peers for bidirectional communication
+                if (peer_host, peer_port) not in self.peers and (peer_host, peer_port) != (self.host, self.port):
+                    self.peers.add((peer_host, peer_port))
+                    logging.info(f"Added peer {peer_host}:{peer_port} from REQUEST_CHAIN")
+
                 logging.info(f"Sending blockchain to {peer_host}:{peer_port}")
                 chain_data = [block.to_dict() for block in self.blockchain.chain]
                 self.send_message(peer_host, peer_port, 'RESPONSE_CHAIN', chain_data)
@@ -182,7 +198,10 @@ class Node:
                 new_chain.append(Block.from_dict(block_data))
             
             logging.info(f"Received chain with {len(new_chain)} blocks.")
-            if self.blockchain.replace_chain(new_chain):
+            with self.lock:
+                replaced = self.blockchain.replace_chain(new_chain)
+                
+            if replaced:
                 logging.info("Replaced local chain with longer valid chain.")
             else:
                 logging.info("Received chain rejected (shorter or invalid).")
@@ -209,7 +228,10 @@ class Node:
             logging.info(f"Received block {block.index} from network.")
             
             # Attempt to add to chain
-            if self.blockchain.add_block(block):
+            with self.lock:
+                added = self.blockchain.add_block(block)
+            
+            if added:
                 logging.info(f"Block {block.index} added to chain. Relaying...")
                 self.broadcast_message('NEW_BLOCK', payload)
             else:
@@ -252,6 +274,7 @@ class Node:
         }
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(5) # Prevent hanging
                 s.connect((host, port))
                 s.sendall((json.dumps(message) + '\\n').encode('utf-8'))
                 logging.info(f"Sent {message_type} to {host}:{port}")
@@ -262,9 +285,14 @@ class Node:
 
     def broadcast_message(self, message_type, payload):
         """Broadcasts a message to all known peers."""
-        for host, port in self.peers:
+        for host, port in list(self.peers):
             if (host, port) != (self.host, self.port):
                 self.send_message(host, port, message_type, payload)
+
+    def get_blocks(self):
+        """Returns a copy of the blockchain safely."""
+        with self.lock:
+            return list(self.blockchain.chain)
 
     def stop(self):
         """Stops the node."""
