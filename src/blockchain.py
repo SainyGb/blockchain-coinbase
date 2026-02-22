@@ -7,7 +7,7 @@ from transaction import Transaction
 logger = logging.getLogger(__name__)
 
 class Blockchain:
-    def __init__(self, difficulty=1):
+    def __init__(self, difficulty=3):
         self.chain = [self.create_genesis_block()]
         self.pending_transactions = []
         self.difficulty = difficulty
