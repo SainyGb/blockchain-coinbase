@@ -13,8 +13,8 @@ from node import Node
 
 class TestNodeCommunication(unittest.TestCase):
     def setUp(self):
-        self.node_a_port = 5000
-        self.node_b_port = 5001
+        self.node_a_port = 5040
+        self.node_b_port = 5041
         self.host = 'localhost'
         
         # Start Node A

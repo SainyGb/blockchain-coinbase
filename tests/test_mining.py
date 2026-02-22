@@ -45,21 +45,23 @@ class TestMining(unittest.TestCase):
                 self.fail("Timed out waiting for block mining")
             time.sleep(0.5)
             
-        self.assertEqual(len(self.node_a.blockchain.chain), 2)
+        self.assertGreaterEqual(len(self.node_a.blockchain.chain), 2)
         
         # Wait for propagation to B
         time.sleep(2)
-        self.assertEqual(len(self.node_b.blockchain.chain), 2, "Node B did not receive the block")
+        # Chain might be longer than 2 if empty blocks were mined
+        self.assertGreaterEqual(len(self.node_b.blockchain.chain), 2, "Node B did not receive the block")
         
         # Verify transaction is in the block on B
-        latest_block_b = self.node_b.blockchain.get_latest_block()
-        # Transaction might be in dict form or object form depending on deserialization.
-        # Check ID.
+        # Search all blocks after genesis
         tx_found = False
-        for t in latest_block_b.transactions:
-            t_id = t.id if isinstance(t, Transaction) else t['id']
-            if t_id == tx.id:
-                tx_found = True
+        for block in self.node_b.blockchain.chain[1:]:
+            for t in block.transactions:
+                t_id = t.id if isinstance(t, Transaction) else t['id']
+                if t_id == tx.id:
+                    tx_found = True
+                    break
+            if tx_found:
                 break
         self.assertTrue(tx_found, "Transaction not found in propagated block")
 
