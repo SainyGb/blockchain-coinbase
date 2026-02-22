@@ -67,6 +67,7 @@ class Node:
             # Check for pending transactions
             if not self.blockchain.pending_transactions:
                 time.sleep(1) # Wait for transactions
+                logging.info("No pending transactions. Waiting...")
                 continue
 
             # Create a candidate block
