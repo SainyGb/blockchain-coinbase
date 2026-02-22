@@ -53,18 +53,55 @@ class Blockchain:
         ]
         return True
 
-    def is_chain_valid(self):
-        """Checks if the blockchain is valid."""
-        for i in range(1, len(self.chain)):
-            current_block = self.chain[i]
-            previous_block = self.chain[i - 1]
+    def is_chain_valid(self, chain=None):
+        """Checks if the blockchain (or a given chain) is valid."""
+        target_chain = chain if chain else self.chain
+        
+        # Check Genesis (only if checking external chain)
+        if chain and target_chain[0].hash != self.create_genesis_block().hash:
+            return False
+
+        for i in range(1, len(target_chain)):
+            current_block = target_chain[i]
+            previous_block = target_chain[i - 1]
 
             if current_block.hash != current_block.calculate_hash():
                 return False
 
             if current_block.previous_hash != previous_block.hash:
                 return False
+            
+            # Check difficulty
+            if current_block.hash[:self.difficulty] != "0" * self.difficulty:
+                return False
 
+        return True
+
+    def replace_chain(self, new_chain):
+        """Replaces the local chain with a new one if it's valid and longer."""
+        if len(new_chain) <= len(self.chain):
+            return False
+            
+        if not self.is_chain_valid(new_chain):
+            return False
+            
+        # Replace chain
+        self.chain = new_chain
+        
+        # Update pending transactions by removing those now confirmed
+        confirmed_tx_ids = set()
+        for block in self.chain:
+            for tx in block.transactions:
+                if isinstance(tx, Transaction):
+                    confirmed_tx_ids.add(tx.id)
+                elif isinstance(tx, dict):
+                    confirmed_tx_ids.add(tx.get('id'))
+                    
+        self.pending_transactions = [
+            tx for tx in self.pending_transactions 
+            if tx.id not in confirmed_tx_ids
+        ]
+        
         return True
 
     def create_new_transaction(self, sender, recipient, amount):

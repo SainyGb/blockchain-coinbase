@@ -38,6 +38,14 @@ class Node:
 
         # Connect to known peers
         self._connect_to_peers()
+        
+        # Request chain from peers (Synchronization)
+        self.broadcast_message('REQUEST_CHAIN', {'port': self.port})
+        logging.info("Requested blockchain from peers.")
+        
+        # Request chain from peers (Synchronization)
+        self.broadcast_message('REQUEST_CHAIN', {})
+        logging.info("Requested blockchain from peers.")
 
     def start_mining(self):
         """Starts the mining process in a separate thread."""
@@ -112,7 +120,7 @@ class Node:
             buffer = ""
             while True:
                 try:
-                    data = conn.recv(1024).decode('utf-8')
+                    data = conn.recv(4096).decode('utf-8')
                     if not data:
                         break
                     buffer += data
@@ -128,19 +136,57 @@ class Node:
         """Processes a received message string."""
         try:
             message = json.loads(message_str)
-            logging.info(f"Received message from {addr}: {message}")
             
             msg_type = message.get('type')
             payload = message.get('payload')
+
+            # Log received message (except large chain responses)
+            if msg_type != 'RESPONSE_CHAIN':
+                logging.info(f"Received message from {addr}: {message}")
+            else:
+                logging.info(f"Received RESPONSE_CHAIN from {addr}")
             
             if msg_type == 'NEW_TRANSACTION':
                 self._handle_new_transaction(payload)
             elif msg_type == 'NEW_BLOCK':
                 self._handle_new_block(payload)
-            # Add other types here
+            elif msg_type == 'REQUEST_CHAIN':
+                self._handle_request_chain(payload, addr)
+            elif msg_type == 'RESPONSE_CHAIN':
+                self._handle_response_chain(payload)
             
         except json.JSONDecodeError:
             logging.error(f"Invalid JSON received from {addr}: {message_str}")
+
+    def _handle_request_chain(self, payload, addr):
+        """Handles a request for the blockchain."""
+        try:
+            peer_host = addr[0]
+            peer_port = payload.get('port')
+            
+            if peer_port:
+                logging.info(f"Sending blockchain to {peer_host}:{peer_port}")
+                chain_data = [block.to_dict() for block in self.blockchain.chain]
+                self.send_message(peer_host, peer_port, 'RESPONSE_CHAIN', chain_data)
+            else:
+                logging.warning(f"Received REQUEST_CHAIN without port from {addr}")
+        except Exception as e:
+            logging.error(f"Error handling REQUEST_CHAIN: {e}")
+
+    def _handle_response_chain(self, payload):
+        """Handles a received blockchain."""
+        try:
+            new_chain = []
+            for block_data in payload:
+                new_chain.append(Block.from_dict(block_data))
+            
+            logging.info(f"Received chain with {len(new_chain)} blocks.")
+            if self.blockchain.replace_chain(new_chain):
+                logging.info("Replaced local chain with longer valid chain.")
+            else:
+                logging.info("Received chain rejected (shorter or invalid).")
+        except Exception as e:
+            logging.error(f"Error processing RESPONSE_CHAIN: {e}")
 
     def _handle_new_transaction(self, payload):
         """Handles a new transaction received from a peer."""
