@@ -2,6 +2,7 @@ import socket
 import threading
 import json
 import logging
+from blockchain import Blockchain
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,6 +16,8 @@ class Node:
             self.peers.update(bootstrap_nodes)
         self.running = False
         self.server_socket = None
+        self.blockchain = Blockchain()
+
 
     def start(self):
         """Starts the node server and initiates connections to peers."""
