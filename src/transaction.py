@@ -14,9 +14,9 @@ class Transaction:
     def calculate_id(self):
         """Calculates a unique ID for the transaction based on its content."""
         tx_content = {
-            "sender": self.sender,
-            "recipient": self.recipient,
-            "amount": self.amount,
+            "origem": self.sender,
+            "destino": self.recipient,
+            "valor": self.amount,
             "timestamp": self.timestamp
         }
         tx_string = json.dumps(tx_content, sort_keys=True).encode()
@@ -25,18 +25,18 @@ class Transaction:
     def to_dict(self):
         return {
             "id": self.id,
-            "sender": self.sender,
-            "recipient": self.recipient,
-            "amount": self.amount,
+            "origem": self.sender,
+            "destino": self.recipient,
+            "valor": self.amount,
             "timestamp": self.timestamp
         }
 
     @staticmethod
     def from_dict(data):
         return Transaction(
-            sender=data["sender"],
-            recipient=data["recipient"],
-            amount=data["amount"],
+            sender=data["origem"],
+            recipient=data["destino"],
+            amount=data["valor"],
             timestamp=data["timestamp"],
             tx_id=data["id"]
         )

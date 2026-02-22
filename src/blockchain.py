@@ -11,13 +11,12 @@ class Blockchain:
         self.chain = [self.create_genesis_block()]
         self.pending_transactions = []
         self.difficulty = difficulty
-        self.mining_reward = 10  # Simplified mining reward
+        self.mining_reward = 50.0  # Standard mining reward
 
     def create_genesis_block(self):
         """Creates the genesis block."""
-        # Genesis transaction to give initial supply to 'admin' for testing
-        genesis_tx = Transaction("0", "admin", 100, timestamp=0)
-        return Block(0, "0", [genesis_tx], timestamp=0)
+        # Standard Genesis Block
+        return Block(0, "0"*64, [], nonce=0, timestamp=0)
 
     def get_latest_block(self):
         """Returns the latest block in the chain."""
@@ -57,7 +56,7 @@ class Blockchain:
         """Checks if the blockchain (or a given chain) is valid."""
         target_chain = chain if chain else self.chain
         
-        # Check Genesis (only if checking external chain)
+        # Check Genesis
         if chain and target_chain[0].hash != self.create_genesis_block().hash:
             return False
 
@@ -123,8 +122,8 @@ class Blockchain:
             if tx.id == transaction.id:
                 return False
 
-        # Check balance (skip check for '0' sender - coinbase)
-        if transaction.sender != "0":
+        # Check balance (skip check for 'coinbase' sender)
+        if transaction.sender != "coinbase":
             if self.get_balance(transaction.sender) < transaction.amount:
                 print(f"Insufficient balance for {transaction.sender}, balance: {self.get_balance(transaction.sender)}")
                 return False
@@ -134,7 +133,7 @@ class Blockchain:
 
     def get_balance(self, address):
         """Calculates the balance of an address."""
-        balance = 0
+        balance = 0.0
         # Iterate over all blocks
         for block in self.chain:
             for tx in block.transactions:
@@ -144,11 +143,15 @@ class Blockchain:
                     if tx.recipient == address:
                         balance += tx.amount
                 elif isinstance(tx, dict):
-                    # Handle dicts (if any remain)
-                    if tx.get('sender') == address:
-                        balance -= tx.get('amount', 0)
-                    if tx.get('recipient') == address:
-                        balance += tx.get('amount', 0)
+                    # Handle dicts with Portuguese keys
+                    sender = tx.get('origem') or tx.get('sender')
+                    recipient = tx.get('destino') or tx.get('recipient')
+                    amount = tx.get('valor') or tx.get('amount', 0)
+                    
+                    if sender == address:
+                        balance -= amount
+                    if recipient == address:
+                        balance += amount
         
         # Check pending transactions (only subtract spending)
         for tx in self.pending_transactions:

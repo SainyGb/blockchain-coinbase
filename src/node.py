@@ -129,19 +129,28 @@ class Node:
         """Handles communication with a connected client."""
         logging.info(f"Connected to {addr}")
         with conn:
-            buffer = ""
-            while True:
-                try:
-                    data = conn.recv(4096).decode('utf-8')
-                    if not data:
+            try:
+                # Read 4-byte header (big-endian size)
+                header = conn.recv(4)
+                if not header:
+                    return
+                length = int.from_bytes(header, 'big')
+                
+                # Read JSON body
+                data = b""
+                while len(data) < length:
+                    packet = conn.recv(length - len(data))
+                    if not packet:
                         break
-                    buffer += data
-                    while '\\n' in buffer:
-                        message, buffer = buffer.split('\\n', 1)
-                        self._process_message(message, addr)
-                except Exception as e:
-                    logging.error(f"Error handling client {addr}: {e}")
-                    break
+                    data += packet
+                
+                if len(data) == length:
+                    message_str = data.decode('utf-8')
+                    self._process_message(message_str, addr)
+                else:
+                    logging.error(f"Incomplete message from {addr}")
+            except Exception as e:
+                logging.error(f"Error handling client {addr}: {e}")
         logging.info(f"Disconnected from {addr}")
 
     def _process_message(self, message_str, addr):
@@ -270,13 +279,17 @@ class Node:
         """Sends a JSON message to a specific peer."""
         message = {
             "type": message_type,
-            "payload": payload
+            "payload": payload,
+            "sender": f"{self.host}:{self.port}"
         }
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(5) # Prevent hanging
                 s.connect((host, port))
-                s.sendall((json.dumps(message) + '\\n').encode('utf-8'))
+                # Standard: [4 bytes big-endian size] [JSON]
+                json_bytes = (json.dumps(message)).encode('utf-8')
+                header = len(json_bytes).to_bytes(4, 'big')
+                s.sendall(header + json_bytes)
                 logging.info(f"Sent {message_type} to {host}:{port}")
         except ConnectionRefusedError:
             logging.error(f"Failed to connect to {host}:{port}")
