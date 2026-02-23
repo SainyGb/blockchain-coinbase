@@ -12,15 +12,8 @@ class Transaction:
         self.id = tx_id if tx_id else self.calculate_id()
 
     def calculate_id(self):
-        """Calculates a unique ID for the transaction based on its content."""
-        tx_content = {
-            "origem": self.sender,
-            "destino": self.recipient,
-            "valor": self.amount,
-            "timestamp": self.timestamp
-        }
-        tx_string = json.dumps(tx_content, sort_keys=True).encode()
-        return hashlib.sha256(tx_string).hexdigest()
+        """Generates a unique ID for the transaction."""
+        return str(uuid.uuid4())
 
     def to_dict(self):
         return {

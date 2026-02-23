@@ -42,10 +42,6 @@ class Node:
         self._connect_to_peers()
         
         # Request chain from peers (Synchronization)
-        self.broadcast_message('REQUEST_CHAIN', {'port': self.port})
-        logging.info("Requested blockchain from peers.")
-        
-        # Request chain from peers (Synchronization)
         self.broadcast_message('REQUEST_CHAIN', {})
         logging.info("Requested blockchain from peers.")
 
@@ -81,7 +77,8 @@ class Node:
             
             # Add Coinbase transaction (Mining Reward)
             miner_address = f"{self.host}:{self.port}"
-            coinbase_tx = Transaction("0", miner_address, self.blockchain.mining_reward)
+            block_timestamp = time.time()
+            coinbase_tx = Transaction("coinbase", miner_address, self.blockchain.mining_reward, timestamp=block_timestamp)
             # Coinbase is usually the first transaction
             pending_txs.insert(0, coinbase_tx)
             
@@ -91,7 +88,7 @@ class Node:
                 index=prev_block.index + 1,
                 previous_hash=prev_block.hash,
                 transactions=pending_txs,
-                timestamp=time.time()
+                timestamp=block_timestamp
             )
 
             # Mine the block (PoW)
@@ -111,7 +108,9 @@ class Node:
             # Add to own chain
             if self.blockchain.add_block(new_block):
                 logging.info(f"Block {new_block.index} mined! Hash: {new_block.hash[:8]}...")
-                self.broadcast_message('NEW_BLOCK', new_block.to_dict())
+                # logging.info(f"Amount of transactions in block: {len(new_block.transactions)}")
+                # logging.info(f"Amount of coins mined: {self.blockchain.get_balance(miner_address)}")
+                self.broadcast_message('NEW_BLOCK', {"block": new_block.to_dict()})
             else:
                 logging.warning("Mined block rejected by self (invalid?).")
 
@@ -172,18 +171,29 @@ class Node:
             elif msg_type == 'NEW_BLOCK':
                 self._handle_new_block(payload)
             elif msg_type == 'REQUEST_CHAIN':
-                self._handle_request_chain(payload, addr)
+                self._handle_request_chain(payload, message, addr)
             elif msg_type == 'RESPONSE_CHAIN':
                 self._handle_response_chain(payload)
             
         except json.JSONDecodeError:
             logging.error(f"Invalid JSON received from {addr}: {message_str}")
 
-    def _handle_request_chain(self, payload, addr):
+    def _handle_request_chain(self, payload, message, addr):
         """Handles a request for the blockchain."""
         try:
             peer_host = addr[0]
-            peer_port = payload.get('port')
+            peer_port = None
+            
+            sender = message.get('sender')
+            if sender:
+                try:
+                    peer_host, peer_port_str = sender.split(':')
+                    peer_port = int(peer_port_str)
+                except ValueError:
+                    pass
+            
+            if not peer_port:
+                peer_port = payload.get('port')
             
             if peer_port:
                 # Add requesting peer to known peers for bidirectional communication
@@ -192,7 +202,12 @@ class Node:
                     logging.info(f"Added peer {peer_host}:{peer_port} from REQUEST_CHAIN")
 
                 logging.info(f"Sending blockchain to {peer_host}:{peer_port}")
-                chain_data = [block.to_dict() for block in self.blockchain.chain]
+                chain_data = {
+                    "blockchain": {
+                        "chain": [block.to_dict() for block in self.blockchain.chain],
+                        "pending_transactions": [tx.to_dict() if hasattr(tx, 'to_dict') else tx for tx in self.blockchain.pending_transactions]
+                    }
+                }
                 self.send_message(peer_host, peer_port, 'RESPONSE_CHAIN', chain_data)
             else:
                 logging.warning(f"Received REQUEST_CHAIN without port from {addr}")
@@ -202,8 +217,15 @@ class Node:
     def _handle_response_chain(self, payload):
         """Handles a received blockchain."""
         try:
+            if isinstance(payload, dict) and "blockchain" in payload:
+                chain_data = payload["blockchain"].get("chain", [])
+            elif isinstance(payload, list):
+                chain_data = payload
+            else:
+                chain_data = []
+
             new_chain = []
-            for block_data in payload:
+            for block_data in chain_data:
                 new_chain.append(Block.from_dict(block_data))
             
             logging.info(f"Received chain with {len(new_chain)} blocks.")
@@ -220,7 +242,8 @@ class Node:
     def _handle_new_transaction(self, payload):
         """Handles a new transaction received from a peer."""
         try:
-            tx = Transaction.from_dict(payload)
+            tx_data = payload.get("transaction", payload) if isinstance(payload, dict) else payload
+            tx = Transaction.from_dict(tx_data)
             # Add to pool. If it's new and valid, add_transaction returns True.
             if self.blockchain.add_transaction(tx):
                 logging.info(f"New valid transaction {tx.id[:8]} added to pool. Relaying...")
@@ -233,7 +256,8 @@ class Node:
     def _handle_new_block(self, payload):
         """Handles a new block received from a peer."""
         try:
-            block = Block.from_dict(payload)
+            block_data = payload.get("block", payload) if isinstance(payload, dict) else payload
+            block = Block.from_dict(block_data)
             logging.info(f"Received block {block.index} from network.")
             
             # Attempt to add to chain
@@ -262,7 +286,7 @@ class Node:
         tx = self.blockchain.create_new_transaction(sender, recipient, amount)
         if tx:
             logging.info(f"Created transaction {tx.id[:8]}")
-            self.broadcast_message('NEW_TRANSACTION', tx.to_dict())
+            self.broadcast_message('NEW_TRANSACTION', {"transaction": tx.to_dict()})
             return tx
         else:
             logging.error("Failed to create transaction (insufficient funds?)")
@@ -291,6 +315,8 @@ class Node:
                 header = len(json_bytes).to_bytes(4, 'big')
                 s.sendall(header + json_bytes)
                 logging.info(f"Sent {message_type} to {host}:{port}")
+                print(message)
+                print(header)
         except ConnectionRefusedError:
             logging.error(f"Failed to connect to {host}:{port}")
         except Exception as e:
