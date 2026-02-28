@@ -296,7 +296,12 @@ class BlockchainGUI:
             # Update status text periodically
             host = self.node.host
             port = self.node.port
-            status_text = f"Status: Running on {host}:{port} | Height: {current_height} | Peers: {len(self.node.peers)}"
+            address = f"{host}:{port}"
+            
+            with self.node.lock:
+                balance = self.node.blockchain.get_balance(address)
+                
+            status_text = f"Status: Running on {host}:{port} | Balance: {balance} | Height: {current_height} | Peers: {len(self.node.peers)}"
             if self.node.mining:
                 status_text += " | Mining..."
             
