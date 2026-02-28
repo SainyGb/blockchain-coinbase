@@ -319,6 +319,29 @@ class Node:
                 logging.warning(f"Failed to connect to known peer {peer_host}:{peer_port}: {e}")
         self.peers = connected_peers
 
+    def connect_to_peer(self, host, port):
+        """Attempts to connect to a new peer dynamically and add it to the network."""
+        if (host, port) == (self.host, self.port):
+            return False
+        
+        if (host, port) in self.peers:
+            return True
+            
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(5)
+                s.connect((host, port))
+            logging.info(f"Successfully connected to new peer: {host}:{port}")
+            with self.lock:
+                self.peers.add((host, port))
+            
+            # Send a REQUEST_CHAIN to the new peer so they add us and we sync
+            self.send_message(host, port, 'REQUEST_CHAIN', {})
+            return True
+        except Exception as e:
+            logging.warning(f"Failed to connect to new peer {host}:{port}: {e}")
+            return False
+
     def send_message(self, host, port, message_type, payload):
         """Sends a JSON message to a specific peer."""
         message = {

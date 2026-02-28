@@ -80,6 +80,20 @@ class BlockchainGUI:
         self.status_label = ttk.Label(action_frame, text="Status: Stopped", font=("Arial", 10, "bold"))
         self.status_label.grid(row=1, column=0, columnspan=7, pady=5)
         
+        # --- Network Frame ---
+        network_frame = ttk.LabelFrame(root, text="Network")
+        network_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(network_frame, text="Add Peer (host:port):").grid(row=0, column=0, padx=5, pady=5)
+        self.new_peer_entry = ttk.Entry(network_frame)
+        self.new_peer_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        self.add_peer_btn = ttk.Button(network_frame, text="Connect", command=self.add_peer, state="disabled")
+        self.add_peer_btn.grid(row=0, column=2, padx=5, pady=5)
+        
+        self.view_peers_btn = ttk.Button(network_frame, text="View Peers", command=self.view_peers, state="disabled")
+        self.view_peers_btn.grid(row=0, column=3, padx=10, pady=5)
+
         self.last_height = 0
 
         # --- Bottom Frame: Blockchain View & Logs ---
@@ -174,6 +188,8 @@ class BlockchainGUI:
             self.send_btn.config(state="normal")
             self.mine_btn.config(state="normal")
             self.refresh_btn.config(state="normal")
+            self.add_peer_btn.config(state="normal")
+            self.view_peers_btn.config(state="normal")
             self.status_label.config(text=f"Status: Running on {host}:{port}", foreground="green")
             
             logging.info(f"GUI started node on {host}:{port}")
@@ -210,6 +226,58 @@ class BlockchainGUI:
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Transaction failed: {e}"))
         
         threading.Thread(target=task, daemon=True).start()
+
+    def add_peer(self):
+        if not self.node:
+            return
+        peer_str = self.new_peer_entry.get().strip()
+        if not peer_str:
+            messagebox.showerror("Error", "Please enter a peer address")
+            return
+            
+        try:
+            host, port_str = peer_str.split(':')
+            port = int(port_str)
+            
+            def connect_task():
+                success = self.node.connect_to_peer(host, port)
+                if success:
+                    self.root.after(0, lambda: messagebox.showinfo("Success", f"Connected to peer {host}:{port}"))
+                    self.root.after(0, lambda: self.new_peer_entry.delete(0, tk.END))
+                else:
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to connect to peer {host}:{port}"))
+                    
+            threading.Thread(target=connect_task, daemon=True).start()
+        except ValueError:
+            messagebox.showerror("Error", "Invalid peer format. Use host:port")
+
+    def view_peers(self):
+        if not self.node:
+            return
+            
+        peers_window = tk.Toplevel(self.root)
+        peers_window.title("Connected Peers")
+        peers_window.geometry("400x300")
+        
+        columns = ("Address", "Balance")
+        tree = ttk.Treeview(peers_window, columns=columns, show="headings")
+        tree.heading("Address", text="Peer Address")
+        tree.heading("Balance", text="Balance")
+        
+        tree.column("Address", width=250)
+        tree.column("Balance", width=100)
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        with self.node.lock:
+            peers_copy = list(self.node.peers)
+            
+        for peer_host, peer_port in peers_copy:
+            if (peer_host, peer_port) == (self.node.host, self.node.port):
+                continue
+            peer_address = f"{peer_host}:{peer_port}"
+            with self.node.lock:
+                balance = self.node.blockchain.get_balance(peer_address)
+            tree.insert("", "end", values=(peer_address, balance))
 
     def toggle_mining(self):
         if not self.node:
