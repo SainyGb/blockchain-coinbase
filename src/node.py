@@ -145,7 +145,11 @@ class Node:
                 
                 if len(data) == length:
                     message_str = data.decode('utf-8')
-                    self._process_message(message_str, addr)
+                    response_dict = self._process_message(message_str, addr)
+                    if response_dict:
+                        resp_bytes = json.dumps(response_dict).encode('utf-8')
+                        resp_header = len(resp_bytes).to_bytes(4, 'big')
+                        conn.sendall(resp_header + resp_bytes)
                 else:
                     logging.error(f"Incomplete message from {addr}")
             except Exception as e:
@@ -171,12 +175,13 @@ class Node:
             elif msg_type == 'NEW_BLOCK':
                 self._handle_new_block(payload)
             elif msg_type == 'REQUEST_CHAIN':
-                self._handle_request_chain(payload, message, addr)
+                return self._handle_request_chain(payload, message, addr)
             elif msg_type == 'RESPONSE_CHAIN':
                 self._handle_response_chain(payload)
             
         except json.JSONDecodeError:
             logging.error(f"Invalid JSON received from {addr}: {message_str}")
+        return None
 
     def _handle_request_chain(self, payload, message, addr):
         """Handles a request for the blockchain."""
@@ -208,11 +213,16 @@ class Node:
                         "pending_transactions": [tx.to_dict() if hasattr(tx, 'to_dict') else tx for tx in self.blockchain.pending_transactions]
                     }
                 }
-                self.send_message(peer_host, peer_port, 'RESPONSE_CHAIN', chain_data)
+                return {
+                    "type": "RESPONSE_CHAIN",
+                    "payload": chain_data,
+                    "sender": f"{self.host}:{self.port}"
+                }
             else:
                 logging.warning(f"Received REQUEST_CHAIN without port from {addr}")
         except Exception as e:
             logging.error(f"Error handling REQUEST_CHAIN: {e}")
+        return None
 
     def _handle_response_chain(self, payload):
         """Handles a received blockchain."""
@@ -270,7 +280,8 @@ class Node:
             else:
                 # If block is not valid or doesn't link, we might need to sync (Week 5).
                 # Or it's just invalid.
-                logging.info(f"Block {block.index} rejected.")
+                logging.info(f"Block {block.index} rejected. Requesting chain sync.")
+                self.broadcast_message('REQUEST_CHAIN', {})
         except Exception as e:
             logging.error(f"Error processing block: {e}")
 
@@ -294,10 +305,19 @@ class Node:
 
     def _connect_to_peers(self):
         """Connects to known peers."""
+        connected_peers = set()
         for peer_host, peer_port in self.peers:
             if (peer_host, peer_port) == (self.host, self.port):
                 continue
-            logging.info(f"Known peer: {peer_host}:{peer_port}")
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(5)
+                    s.connect((peer_host, peer_port))
+                logging.info(f"Successfully connected to known peer: {peer_host}:{peer_port}")
+                connected_peers.add((peer_host, peer_port))
+            except Exception as e:
+                logging.warning(f"Failed to connect to known peer {peer_host}:{peer_port}: {e}")
+        self.peers = connected_peers
 
     def send_message(self, host, port, message_type, payload):
         """Sends a JSON message to a specific peer."""
@@ -315,8 +335,25 @@ class Node:
                 header = len(json_bytes).to_bytes(4, 'big')
                 s.sendall(header + json_bytes)
                 logging.info(f"Sent {message_type} to {host}:{port}")
-                print(message)
-                print(header)
+                
+                # Try to read response on the same socket
+                try:
+                    resp_header = s.recv(4)
+                    if resp_header:
+                        resp_length = int.from_bytes(resp_header, 'big')
+                        resp_data = b""
+                        while len(resp_data) < resp_length:
+                            packet = s.recv(resp_length - len(resp_data))
+                            if not packet:
+                                break
+                            resp_data += packet
+                        if len(resp_data) == resp_length:
+                            resp_message_str = resp_data.decode('utf-8')
+                            self._process_message(resp_message_str, (host, port))
+                except socket.timeout:
+                    pass  # No response received, which is fine for most messages
+                except Exception as e:
+                    logging.error(f"Error reading response from {host}:{port}: {e}")
         except ConnectionRefusedError:
             logging.error(f"Failed to connect to {host}:{port}")
         except Exception as e:
