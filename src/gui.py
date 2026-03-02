@@ -76,9 +76,13 @@ class BlockchainGUI:
         self.refresh_btn = ttk.Button(action_frame, text="Refresh Chain", command=self.update_chain_display, state="disabled")
         self.refresh_btn.grid(row=0, column=6, padx=10, pady=5)
 
+        # Pending Txs
+        self.pending_txs_btn = ttk.Button(action_frame, text="Pending Txs", command=self.view_pending_txs, state="disabled")
+        self.pending_txs_btn.grid(row=0, column=7, padx=10, pady=5)
+
         # Status Label
         self.status_label = ttk.Label(action_frame, text="Status: Stopped", font=("Arial", 10, "bold"))
-        self.status_label.grid(row=1, column=0, columnspan=7, pady=5)
+        self.status_label.grid(row=1, column=0, columnspan=8, pady=5)
         
         # --- Network Frame ---
         network_frame = ttk.LabelFrame(root, text="Network")
@@ -188,6 +192,7 @@ class BlockchainGUI:
             self.send_btn.config(state="normal")
             self.mine_btn.config(state="normal")
             self.refresh_btn.config(state="normal")
+            self.pending_txs_btn.config(state="normal")
             self.add_peer_btn.config(state="normal")
             self.view_peers_btn.config(state="normal")
             self.status_label.config(text=f"Status: Running on {host}:{port}", foreground="green")
@@ -278,6 +283,33 @@ class BlockchainGUI:
             with self.node.lock:
                 balance = self.node.blockchain.get_balance(peer_address)
             tree.insert("", "end", values=(peer_address, balance))
+
+    def view_pending_txs(self):
+        if not self.node:
+            return
+            
+        txs_window = tk.Toplevel(self.root)
+        txs_window.title("Pending Transactions")
+        txs_window.geometry("600x400")
+        
+        columns = ("ID", "Sender", "Recipient", "Amount")
+        tree = ttk.Treeview(txs_window, columns=columns, show="headings")
+        tree.heading("ID", text="Tx ID")
+        tree.heading("Sender", text="Sender")
+        tree.heading("Recipient", text="Recipient")
+        tree.heading("Amount", text="Amount")
+        
+        tree.column("ID", width=100)
+        tree.column("Sender", width=150)
+        tree.column("Recipient", width=150)
+        tree.column("Amount", width=100)
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        with self.node.lock:
+            pending_txs = list(self.node.blockchain.pending_transactions)
+            
+        for tx in pending_txs:
+            tree.insert("", "end", values=(tx.id[:8] + "...", tx.sender, tx.recipient, tx.amount))
 
     def toggle_mining(self):
         if not self.node:
